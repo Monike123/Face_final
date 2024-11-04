@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .highlight {
+            font-weight: bold;
+            color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Face Recognition App</h1>
+
+        <!-- Status Message Block -->
+        <div id="statusMessage" class="status-message" style="display: none;"></div>
+
+        <h2>Upload an Image</h2>
+        <form id="uploadForm" class="form">
+            <input type="file" name="image" required>
+            <button type="submit" class="rounded-button">Upload</button>
+        </form>
+
+        <h2>Verify an Image</h2>
+        <form id="verifyForm" class="form">
+            <input type="file" name="image" required>
+            <button type="submit" class="rounded-button">Verify</button>
+        </form>
+
+        <h2>Matched Image</h2>
+        <div id="matchedImageContainer" class="result-container">
+            <p id="noMatchMessage" style="display: none;">No match found.</p>
+            <img id="matchedImage" src="" alt="Matched Image" style="display: none;">
+            <p id="similarityScore" style="display: none;">Similarity: </p>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

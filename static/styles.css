@@ -1,0 +1,115 @@
+/* Style for the body */
+body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: PURPLE; /* Dark background */
+    font-family: 'Arial', sans-serif;
+    color: purple; /* White text color */
+    text-align: center;
+}
+
+/* Centering the container */
+.container {
+    background-color: rgba(255, 255, 255, 0.8); /* Dim white background with transparency */
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.5);
+}
+
+/* Title and headings */
+h1, h2 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: bold;
+    margin-bottom: 20px;
+    color: PURPLE; /* Light yellow font for headings */
+}
+
+/* Form elements */
+.form {
+    margin-bottom: 20px;
+}
+
+input[type="file"] {
+    width: 90%;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    color: purple;
+    box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Rounded buttons */
+.rounded-button {
+    background-color: white; /* Light yellow button */
+    border: 1px solid purple; /* Corrected border property */
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s, color 0.3s; /* Combined transitions */
+    margin-top: 10px;
+    box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.2)
+}
+
+.rounded-button:hover {
+    background-color: purple;
+    color: white; /* Change text color on hover */
+}
+
+
+/* Matched image container */
+.result-container {
+    margin-top: 20px;
+    background-color: rgba(255, 255, 255, 0.2); /* Dim white background */
+    padding: 20px;
+    border-radius: 10px;
+    display: flex; /* Use flexbox for alignment */
+    flex-direction: column; /* Stack children vertically */
+    align-items: center; /* Center horizontally */
+    justify-content: center; /* Center vertically */
+    text-align: center; /* Center text */
+}
+
+#matchedImage {
+    max-width: 100%;
+    border-radius: 10px;
+}
+
+/* Similarity score */
+#similarityScore {
+    font-size: 16px;
+    color: black;
+    margin-top: 10px;
+    align-items:center;
+}
+
+/* Responsive design */
+@media only screen and (max-width: 600px) {
+    .container {
+        width: 100%;
+        padding: 15px;
+    }
+
+    h1, h2 {
+        font-size: 22px;
+    }
+
+    .rounded-button {
+        font-size: 14px;
+        padding: 8px 15px;
+    }
+
+    input[type="file"] {
+        font-size: 14px;
+    }
+}
+
