@@ -1,88 +1,90 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory
-import face_recognition
+import os
+import cloudinary
+import cloudinary.uploader
+from flask import Flask, request, jsonify
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import numpy as np
+import face_recognition
 from PIL import Image
-import os
+import numpy as np
 
 app = Flask(__name__)
 
-# Database connection parameters
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name="your_cloud_name",  # Replace with your Cloudinary Cloud Name
+    api_key="your_api_key",        # Replace with your Cloudinary API Key
+    api_secret="your_api_secret"   # Replace with your Cloudinary API Secret
+)
+
+# Aiven PostgreSQL Database configuration
 DB_HOST = 'face-opop.g.aivencloud.com'
 DB_PORT = '21703'
 DB_USER = 'avnadmin'
 DB_PASSWORD = 'AVNS_X20xXPQrX-lExpXvOyo'
 DB_NAME = 'defaultdb'
 
-# Directory to save and serve images
-IMAGE_DIR = 'images'
-if not os.path.exists(IMAGE_DIR):
-    os.makedirs(IMAGE_DIR)
-
-
 @app.route('/store_image', methods=['POST'])
 def store_image():
     try:
-        # Connect to the database
+        # Check if the image file is in the request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+
+        # Retrieve the image from the request
+        file = request.files['image']
+
+        # Upload the image to Cloudinary
+        cloudinary_response = cloudinary.uploader.upload(file)
+        image_url = cloudinary_response['secure_url']  # URL of the uploaded image
+
+        # Process the image for facial encoding
+        img = Image.open(file.stream)
+        img_array = np.array(img)
+
+        # Get facial encodings
+        encodings = face_recognition.face_encodings(img_array)
+        if not encodings:
+            return jsonify({'error': 'No face detected in the image'}), 400
+
+        # Convert encodings to binary for database storage
+        encoding_binary = np.array(encodings[0], dtype=np.float32).tobytes()
+
+        # Connect to PostgreSQL database
         conn = psycopg2.connect(
             host=DB_HOST, port=DB_PORT, user=DB_USER,
             password=DB_PASSWORD, database=DB_NAME
         )
         cur = conn.cursor()
 
-        # Read image from POST request
-        file = request.files['image']
-        img = Image.open(file.stream)
-        img = np.array(img)  # Convert PIL Image to numpy array
-
-        # Save the image
-        image_path = os.path.join(IMAGE_DIR, file.filename)
-        Image.fromarray(img).save(image_path)
-
-        # Use face_recognition to get encodings
-        encodings = face_recognition.face_encodings(img)
-
-        if len(encodings) == 0:
-            return jsonify({'error': 'No face detected in the image'}), 400
-
-        encoding = encodings[0]  # Take the first face encoding found
-        encoding_binary = np.array(encoding, dtype=np.float32).tobytes()
-
-        # Insert image and encoding into the database
-        cur.execute("INSERT INTO faces (filename, embedding) VALUES (%s, %s) RETURNING id",
-                    (file.filename, psycopg2.Binary(encoding_binary)))
+        # Insert image URL and encoding into the database
+        cur.execute(
+            "INSERT INTO faces (filename, embedding) VALUES (%s, %s) RETURNING id",
+            (image_url, psycopg2.Binary(encoding_binary))
+        )
         conn.commit()
-        image_id = cur.fetchone()[0]  # Get the ID of the inserted image
+
+        # Retrieve the ID of the inserted record
+        image_id = cur.fetchone()[0]
+
+        # Close database connection
         cur.close()
         conn.close()
 
-        return jsonify({'message': 'Image stored successfully', 'image_id': image_id}), 200
+        return jsonify({'message': 'Image stored successfully', 'image_id': image_id, 'image_url': image_url}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/images/<filename>')
-def serve_image(filename):
-    image_path = os.path.join(IMAGE_DIR, filename)
-    if os.path.exists(image_path):
-        return send_from_directory(IMAGE_DIR, filename)
-    else:
-        return jsonify({'error': 'Image not found'}), 404
-
-
 @app.route('/verify_image', methods=['POST'])
 def verify_image():
     try:
-        # Connect to the database
-        conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, user=DB_USER,
-            password=DB_PASSWORD, database=DB_NAME
-        )
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # Check if the image file is in the request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
 
-        # Read image from POST request
+        # Retrieve the image from the request
         file = request.files['image']
         img = Image.open(file.stream)
 
@@ -90,35 +92,36 @@ def verify_image():
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
-        img = np.array(img)  # Convert PIL Image to numpy array
+        img_array = np.array(img)
 
-        # Use face_recognition to get encodings
-        query_encodings = face_recognition.face_encodings(img)
-
-        if len(query_encodings) == 0:
-            print(f"No face detected in the image: {file.filename}")
+        # Get facial encodings
+        query_encodings = face_recognition.face_encodings(img_array)
+        if not query_encodings:
             return jsonify({'error': 'No face detected in the image'}), 400
 
-        query_embedding = query_encodings[0]  # Get the first encoding
+        query_embedding = query_encodings[0]
 
-        # Retrieve encodings from the database
+        # Connect to PostgreSQL database
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, user=DB_USER,
+            password=DB_PASSWORD, database=DB_NAME
+        )
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Retrieve embeddings from the database
         cur.execute("SELECT id, filename, embedding FROM faces")
         rows = cur.fetchall()
 
-        best_similarity = -1  # Initialize to -1 to ensure the first similarity is better
+        best_similarity = -1
         matched_image = None
 
+        # Compare with database encodings
         for row in rows:
             db_embedding = np.frombuffer(row['embedding'], dtype=np.float32)
 
-            if len(query_embedding) != len(db_embedding):
-                print(f"Skipping due to dimension mismatch: query {len(query_embedding)}, db {len(db_embedding)}")
-                continue
-
+            # Compute face distance
             distance = face_recognition.face_distance([db_embedding], query_embedding)[0]
             similarity = max(0, 1 - distance)  # Convert distance to similarity
-
-            print(f"Comparing with {row['filename']}, similarity: {similarity:.2f}")
 
             if similarity > best_similarity:
                 best_similarity = similarity
@@ -127,25 +130,19 @@ def verify_image():
         cur.close()
         conn.close()
 
-        # Determine similarity percentage
-        similarity_percentage = best_similarity if best_similarity >= 0 else 0  # Convert to percentage
-        print(f"Final similarity percentage: {similarity_percentage:.2f}")
-
-        # Response based on best similarity found
-        if matched_image and best_similarity >= 0.5:  # Adjusted threshold
-            return jsonify({'message': 'Match found', 'matched_image': matched_image, 'similarity': similarity_percentage}), 200
+        # Response based on similarity
+        if matched_image and best_similarity >= 0.5:
+            return jsonify({
+                'message': 'Match found',
+                'matched_image': matched_image,
+                'similarity': best_similarity
+            }), 200
         else:
-            return jsonify({'message': 'No match found', 'similarity': similarity_percentage}), 404  # Change response code to 200
+            return jsonify({'message': 'No match found', 'similarity': best_similarity}), 404
 
     except Exception as e:
-        print(f"Error occurred: {str(e)}")  # Debug log for the error
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-
 if __name__ == '__main__':
-    app.run(debug=False, use_reloader=False)
+    app.run(debug=True)
