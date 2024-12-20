@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 import face_recognition
 from PIL import Image
 import numpy as np
+import io
 
 app = Flask(__name__)
 
@@ -40,6 +41,7 @@ def store_image():
 
         # Process the image for facial encoding
         img = Image.open(file.stream)
+        img = img.resize((400, 400))  # Resize the image to reduce memory usage
         img_array = np.array(img)
 
         # Get facial encodings
@@ -50,26 +52,21 @@ def store_image():
         # Convert encodings to binary for database storage
         encoding_binary = np.array(encodings[0], dtype=np.float32).tobytes()
 
-        # Connect to PostgreSQL database
-        conn = psycopg2.connect(
+        # Connect to PostgreSQL database using context manager
+        with psycopg2.connect(
             host=DB_HOST, port=DB_PORT, user=DB_USER,
             password=DB_PASSWORD, database=DB_NAME
-        )
-        cur = conn.cursor()
+        ) as conn:
+            with conn.cursor() as cur:
+                # Insert image URL and encoding into the database
+                cur.execute(
+                    "INSERT INTO faces (filename, embedding) VALUES (%s, %s) RETURNING id",
+                    (image_url, psycopg2.Binary(encoding_binary))
+                )
+                conn.commit()
 
-        # Insert image URL and encoding into the database
-        cur.execute(
-            "INSERT INTO faces (filename, embedding) VALUES (%s, %s) RETURNING id",
-            (image_url, psycopg2.Binary(encoding_binary))
-        )
-        conn.commit()
-
-        # Retrieve the ID of the inserted record
-        image_id = cur.fetchone()[0]
-
-        # Close database connection
-        cur.close()
-        conn.close()
+                # Retrieve the ID of the inserted record
+                image_id = cur.fetchone()[0]
 
         return jsonify({'message': 'Image stored successfully', 'image_id': image_id, 'image_url': image_url}), 200
 
@@ -92,6 +89,7 @@ def verify_image():
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
+        img = img.resize((400, 400))  # Resize the image to reduce memory usage
         img_array = np.array(img)
 
         # Get facial encodings
@@ -101,34 +99,30 @@ def verify_image():
 
         query_embedding = query_encodings[0]
 
-        # Connect to PostgreSQL database
-        conn = psycopg2.connect(
+        # Connect to PostgreSQL database using context manager
+        with psycopg2.connect(
             host=DB_HOST, port=DB_PORT, user=DB_USER,
             password=DB_PASSWORD, database=DB_NAME
-        )
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        ) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Retrieve embeddings from the database
+                cur.execute("SELECT id, filename, embedding FROM faces")
+                rows = cur.fetchall()
 
-        # Retrieve embeddings from the database
-        cur.execute("SELECT id, filename, embedding FROM faces")
-        rows = cur.fetchall()
+                best_similarity = -1
+                matched_image = None
 
-        best_similarity = -1
-        matched_image = None
+                # Compare with database encodings
+                for row in rows:
+                    db_embedding = np.frombuffer(row['embedding'], dtype=np.float32)
 
-        # Compare with database encodings
-        for row in rows:
-            db_embedding = np.frombuffer(row['embedding'], dtype=np.float32)
+                    # Compute face distance
+                    distance = face_recognition.face_distance([db_embedding], query_embedding)[0]
+                    similarity = max(0, 1 - distance)  # Convert distance to similarity
 
-            # Compute face distance
-            distance = face_recognition.face_distance([db_embedding], query_embedding)[0]
-            similarity = max(0, 1 - distance)  # Convert distance to similarity
-
-            if similarity > best_similarity:
-                best_similarity = similarity
-                matched_image = row['filename']
-
-        cur.close()
-        conn.close()
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        matched_image = row['filename']
 
         # Response based on similarity
         if matched_image and best_similarity >= 0.5:
