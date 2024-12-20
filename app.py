@@ -12,9 +12,9 @@ app = Flask(__name__)
 
 # Configure Cloudinary
 cloudinary.config(
-    cloud_name="your_cloud_name",  # Replace with your Cloudinary Cloud Name
-    api_key="your_api_key",        # Replace with your Cloudinary API Key
-    api_secret="your_api_secret"   # Replace with your Cloudinary API Secret
+    cloud_name="dgnoyjwax",  # Replace with your Cloudinary Cloud Name
+    api_key="678962427316572",        # Replace with your Cloudinary API Key
+    api_secret="nkvt1twiZzv2RvYugi8ASv7h_cw"   # Replace with your Cloudinary API Secret
 )
 
 # Aiven PostgreSQL Database configuration
